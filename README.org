@@ -1,0 +1,14 @@
+* Purpose
+Tool to create mutants of SMT queries for brittleness assessment.
+* Usage
+** Invoke with
+mutants <query-path> <number-of-mutants>
+** Results
+Files with the naming convention ~mutant_i_of_<filename>~
+where ~<filename>~ was the input file
+* Dependencies
+- Racket
+* Installation
+#+begin_src bash
+  raco exe mutants.rkt
+#+end_src
