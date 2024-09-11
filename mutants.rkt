@@ -2,7 +2,17 @@
 
 (require racket/list)
 
-(define BUFFER-THRESHOLD 100000000)
+;; ===============
+;; Input arguments
+;; ===============
+
+(define buffer-threshold (make-parameter 100000000))
+(define output-dir (make-parameter #f))
+(define mutant-num (make-parameter 10))
+
+;; =======
+;; Writing
+;; =======
 
 (define (needs-bars? s)
   (let ([str (format "~s" s)])
@@ -30,6 +40,10 @@
                 (display #\newline virtual-output))
               prog)
     (get-output-string virtual-output)))
+
+;; ===============
+;; Sexp alteration
+;; ===============
 
 (define (should-keep program)
   (not
@@ -85,6 +99,10 @@
          (hash-ref symb-table sexp sexp)]
         [else sexp]))
 
+;; ======
+;; Writer
+;; ======
+
 (define (writer out seed)
   (let ([symb-gen (symbol-generator seed)]
         [accumulator '()]
@@ -112,10 +130,14 @@
                          (print program-string writer-buffer)
                          (set! writer-buffer-size (+ writer-buffer-size
                                                      (string-length program-string))))
-                       (when (> writer-buffer-size BUFFER-THRESHOLD)
+                       (when (> writer-buffer-size (buffer-threshold))
                          (print (get-output-string writer-buffer) out)
                          (set! writer-buffer (open-output-string))
                          (set! writer-buffer-size 0)))))))))
+
+;; ======================
+;; Main method definition
+;; ======================
 
 (define (make-progress-bar sofar total)
   (let ([chars (quotient (* 20 sofar) total)])
@@ -125,15 +147,17 @@
                      (make-string (- 20 chars) #\space)
                      (quotient (* 100 sofar) total)))))
 
-(define (create-mutants fname num)
-  (let* ([seeds (range 0 num)]
-         [outs (map (lambda (n)
-                      (open-output-file
-                       (format "mutant_~a_of_~a" n fname)
-                       #:exists 'replace))
-                    seeds)]
-         [writers (map writer outs seeds)]
-         [total-size (file-size fname)])
+(define (create-mutants file-path out-dir num)
+  (let*-values ([(seeds) (range 0 num)]
+                [(fname-base fname _) (split-path file-path)]
+                [(output-directory (or out-dir fname-base))]
+                [(outs) (map (lambda (n)
+                               (open-output-file
+                                (format "mutant_~a_of_~a" n fname)
+                                #:exists 'replace))
+                             seeds)]
+                [(writers) (map writer outs seeds)]
+                [(total-size) (file-size fname)])
     (letrec ([write-all
               (lambda (infile)
                 (let [(sexp (read infile))]
@@ -149,9 +173,29 @@
         (close-input-port input-file)
         (map close-output-port outs)))))
 
-(let* ([args (current-command-line-arguments)]
-       [fname (vector-ref args 0)]
-       [num (string->number (vector-ref args 1))])
-  (create-mutants fname num)
-  (void))
+;; =============================
+;; Define command line arguments
+;; =============================
+
+
+(define file-to-mutate
+  (command-line
+   #:program "mutants"
+   #:once-each
+   [("-n" "--num") "Set the number of mutants. Default: ~a."
+                   (mutant-num)]
+   #:once-any
+   [("-d" "--directory") dir
+                         "Where to put the mutants. Default is the directory of the input file."
+                         (output-dir dir)]
+   [("-t" "--threshold") t
+                         ("Buffer threshold for writing to the disk in bytes."
+                          "Default: 100Mb")
+                         (buffer-threshold (string->number t))]
+   #:args (filename)
+   filename))
+
+
+(create-mutants file-to-mutate (output-dir) (mutant-num))
+(void)
 
