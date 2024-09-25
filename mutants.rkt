@@ -174,7 +174,8 @@
         (display #\return) ; set the progress to 100 :)
         (display (format "Progress: [~a] 100%\n" (make-string 20 #\=)))
         (close-input-port input-file)
-        (map close-output-port outs)))))
+        (map close-output-port outs)
+        (void)))))
 
 ;; =============================
 ;; Define command line arguments
@@ -185,7 +186,7 @@
   (command-line
    #:program "mutants"
    #:once-each
-   [("-n" "--num") "Set the number of mutants. Default: ~a."
+   [("-n" "--num") "Set the number of mutants. Default: 10."
                    (mutant-num)]
    #:once-any
    [("-d" "--directory") dir
