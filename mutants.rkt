@@ -112,14 +112,14 @@
         [symb-table (make-hash)])
     (lambda (sexp)
       (if (equal? sexp 'flush)
-          (print (get-output-string writer-buffer) out)
+          (display (get-output-string writer-buffer) out)
           (when (should-keep sexp)
             (if (is-assert? sexp)
                 (begin (when (not accumulating)
                          (set! accumulating 'assert))
                        (set! accumulator (cons (rename-symbs sexp symb-table) accumulator)))
                 (begin (let ([program-string (program->string (shuffle accumulator))])
-                         (print program-string writer-buffer)
+                         (display program-string writer-buffer)
                          (set! writer-buffer-size (+ writer-buffer-size
                                                      (string-length program-string))))
                        (set! accumulator '())
@@ -127,11 +127,11 @@
                        (when (is-def? sexp)
                          (hash-set! symb-table (cadr sexp) (symb-gen)))
                        (let ([program-string (program->string (list (rename-symbs sexp symb-table)))])
-                         (print program-string writer-buffer)
+                         (display program-string writer-buffer)
                          (set! writer-buffer-size (+ writer-buffer-size
                                                      (string-length program-string))))
                        (when (> writer-buffer-size (buffer-threshold))
-                         (print (get-output-string writer-buffer) out)
+                         (display (get-output-string writer-buffer) out)
                          (set! writer-buffer (open-output-string))
                          (set! writer-buffer-size 0)))))))))
 
@@ -150,10 +150,13 @@
 (define (create-mutants file-path out-dir num)
   (let*-values ([(seeds) (range 0 num)]
                 [(fname-base fname _) (split-path file-path)]
-                [(output-directory (or out-dir fname-base))]
+                [(output-directory) (begin
+                                      (when (and out-dir (not (file-exists? out-dir)))
+                                        (make-directory out-dir))
+                                      (or out-dir (if (equal? fname-base 'relative) "." fname-base)))]
                 [(outs) (map (lambda (n)
                                (open-output-file
-                                (format "mutant_~a_of_~a" n fname)
+                                (build-path output-directory (format "mutant_~a_of_~a" n fname))
                                 #:exists 'replace))
                              seeds)]
                 [(writers) (map writer outs seeds)]
@@ -196,6 +199,6 @@
    filename))
 
 
-(create-mutants file-to-mutate (output-dir) (mutant-num))
-(void)
+(begin (create-mutants file-to-mutate (output-dir) (mutant-num))
+       (void))
 
