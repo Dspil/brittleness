@@ -160,7 +160,7 @@
                                 #:exists 'replace))
                              seeds)]
                 [(writers) (map writer outs seeds)]
-                [(total-size) (file-size fname)])
+                [(total-size) (file-size file-path)])
     (letrec ([write-all
               (lambda (infile)
                 (let [(sexp (read infile))]
@@ -168,7 +168,7 @@
                     (make-progress-bar (file-position infile) total-size)
                     (map (lambda (w) (w sexp)) writers)
                     (write-all infile))))])
-      (let ([input-file (open-input-file fname)])
+      (let ([input-file (open-input-file file-path)])
         (write-all input-file)
         (map (lambda (w) (w 'flush)) writers) ; flush all the writer buffers
         (display #\return) ; set the progress to 100 :)
