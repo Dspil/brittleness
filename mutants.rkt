@@ -9,6 +9,7 @@
 (define buffer-threshold (make-parameter 100000000))
 (define output-dir (make-parameter #f))
 (define mutant-num (make-parameter 10))
+(define starting-num (make-parameter 0))
 
 ;; =======
 ;; Writing
@@ -148,7 +149,7 @@
                      (quotient (* 100 sofar) total)))))
 
 (define (create-mutants file-path out-dir num)
-  (let*-values ([(seeds) (range 0 num)]
+  (let*-values ([(seeds) (range (starting-num) (+ (starting-num) num))]
                 [(fname-base fname _) (split-path file-path)]
                 [(output-directory) (begin
                                       (when (and out-dir (not (file-exists? out-dir)))
@@ -186,8 +187,9 @@
   (command-line
    #:program "mutants"
    #:once-each
-   [("-n" "--num") "Set the number of mutants. Default: 10."
-                   (mutant-num)]
+   [("-n" "--num") num
+                   "Set the number of mutants. Default: 10."
+                   (mutant-num (string->number num))]
    #:once-any
    [("-d" "--directory") dir
                          "Where to put the mutants. Default is the directory of the input file."
@@ -196,6 +198,9 @@
                          ("Buffer threshold for writing to the disk in bytes."
                           "Default: 100Mb")
                          (buffer-threshold (string->number t))]
+   [("-s" "--start") start
+                     "Starting number of the mutants"
+                     (starting-num (string->number start))]
    #:args (filename)
    filename))
 
