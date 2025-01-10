@@ -10,6 +10,26 @@
 (define output-dir (make-parameter #f))
 (define mutant-num (make-parameter 10))
 (define starting-num (make-parameter 0))
+(define renaming (make-parameter #t))
+(define shuffling (make-parameter #t))
+
+;; ===================
+;; Random string state
+;; ===================
+
+(define allowed-start-symbols (list->vector
+                               (append (map (lambda (a)
+                                              (integer->char (+ a (char->integer #\a)))) (range 0 26))
+                                       (map (lambda (a)
+                                              (integer->char (+ a (char->integer #\A)))) (range 0 26)))))
+(define allowed-symbols (list->vector
+                         (append (map (lambda (a)
+                                        (integer->char (+ a (char->integer #\a)))) (range 0 26))
+                                 (map (lambda (a)
+                                        (integer->char (+ a (char->integer #\A)))) (range 0 26))
+                                 (map (lambda (a)
+                                        (integer->char (+ a (char->integer #\0)))) (range 0 10))
+                                 '(#\- #\: #\@ #\_))))
 
 ;; =======
 ;; Writing
@@ -56,32 +76,27 @@
                   :smt.random_seed
                   :sls.random_seed)))))
 
-(define (decode-symb stable item)
-  (letrec ([base-n
-            (lambda (stable item acc)
-              (if (zero? item)
-                  acc
-                  (let ([vlen (vector-length stable)])
-                    (base-n stable (quotient item vlen)
-                            (cons (remainder item vlen) acc)
-                            ))))])
-    (list->string (map (lambda (i) (vector-ref stable i))
-                       (base-n stable item '())))))
+(define (random-char v)
+  (vector-ref v (random (vector-length v))))
 
-(define (symbol-generator seed)
-  (let* ([stable (list->vector
-                  (shuffle
-                   (append (map (lambda (a)
-                                  (integer->char (+ a (char->integer #\a)))) (range 0 26))
-                           (map (lambda (a)
-                                  (integer->char (+ a (char->integer #\A)))) (range 0 26)))))]
-         [current-item 0])
+(define (random-string)
+  (let* ([start (random-char allowed-start-symbols)]
+         [len (random 4 13)]
+         [body (map (lambda (a) (random-char allowed-symbols)) (range (- len 1)))])
+    (list->string (cons start body))))
+
+(define (unique-random-string memory)
+  (let ([s (random-string)])
+    (if (set-member? memory s)
+        (unique-random-string memory)
+        s)))
+
+(define (symbol-generator)
+  (let* ([string-memory (mutable-set)])
     (lambda ()
-      (begin0
-        (string->symbol (format "GS-~a-~a"
-                                seed
-                                (decode-symb stable current-item)))
-        (set! current-item (+ current-item 1))))))
+      (let ([s (unique-random-string string-memory)])
+        (set-add! string-memory s)
+        (string->symbol s)))))
 
 (define (is-assert? sexp)
   (and (not (empty? sexp)) ; could be removed potentially
@@ -92,20 +107,22 @@
        (member (car sexp) '(declare-sort declare-fun declare-const))))
 
 (define (rename-symbs sexp symb-table)
-  (cond [(list? sexp)
-         (map (lambda (s)
-                (rename-symbs s symb-table))
-              sexp)]
-        [(symbol? sexp)
-         (hash-ref symb-table sexp sexp)]
-        [else sexp]))
+  (if (renaming) ; renaming happens only when it is activated
+      (cond [(list? sexp)
+             (map (lambda (s)
+                    (rename-symbs s symb-table))
+                  sexp)]
+            [(symbol? sexp)
+             (hash-ref symb-table sexp sexp)]
+            [else sexp])
+      sexp))
 
 ;; ======
 ;; Writer
 ;; ======
 
-(define (writer out seed)
-  (let ([symb-gen (symbol-generator seed)]
+(define (writer out)
+  (let ([symb-gen (symbol-generator)]
         [accumulator '()]
         [writer-buffer (open-output-string)]
         [writer-buffer-size 0]
@@ -119,7 +136,10 @@
                 (begin (when (not accumulating)
                          (set! accumulating 'assert))
                        (set! accumulator (cons (rename-symbs sexp symb-table) accumulator)))
-                (begin (let ([program-string (program->string (shuffle accumulator))])
+                (begin (let ([program-string (program->string
+                                              (if (shuffling) ; shuffle only when shuffling is activated
+                                                  (shuffle accumulator)
+                                                  accumulator))])
                          (display program-string writer-buffer)
                          (set! writer-buffer-size (+ writer-buffer-size
                                                      (string-length program-string))))
@@ -152,7 +172,7 @@
   (let*-values ([(seeds) (range (starting-num) (+ (starting-num) num))]
                 [(fname-base fname _) (split-path file-path)]
                 [(output-directory) (begin
-                                      (when (and out-dir (not (file-exists? out-dir)))
+                                      (when (and out-dir (not (directory-exists? out-dir)))
                                         (make-directory out-dir))
                                       (or out-dir (if (equal? fname-base 'relative) "." fname-base)))]
                 [(outs) (map (lambda (n)
@@ -160,7 +180,7 @@
                                 (build-path output-directory (format "mutant_~a_of_~a" n fname))
                                 #:exists 'replace))
                              seeds)]
-                [(writers) (map writer outs seeds)]
+                [(writers) (map writer outs)]
                 [(total-size) (file-size file-path)])
     (letrec ([write-all
               (lambda (infile)
@@ -190,7 +210,6 @@
    [("-n" "--num") num
                    "Set the number of mutants. Default: 10."
                    (mutant-num (string->number num))]
-   #:once-any
    [("-d" "--directory") dir
                          "Where to put the mutants. Default is the directory of the input file."
                          (output-dir dir)]
@@ -201,6 +220,12 @@
    [("-s" "--start") start
                      "Starting number of the mutants"
                      (starting-num (string->number start))]
+   [("-r" "--norename")
+    "Disable renaming."
+    (renaming #f)]
+   [("-o" "--noshuffle")
+    "Disable shuffling."
+    (shuffling #f)]
    #:args (filename)
    filename))
 
