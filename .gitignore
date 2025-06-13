@@ -1,3 +1,4 @@
 /mutants
 /*.smt2
 /target/
+/mutator/
