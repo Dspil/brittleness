@@ -6,9 +6,19 @@ mutants <query-path> <number-of-mutants>
 ** Results
 Files with the naming convention ~mutant_i_of_<filename>~
 where ~<filename>~ was the input file
+** WARNING
+This program does not support queries with function overloading.
 * Dependencies
 - Racket
 * Installation
+For a simple racket file run:
 #+begin_src bash
-  raco exe mutants.rkt
+  make
 #+end_src
+
+For a standalone run:
+#+begin_src bash
+  make dist
+#+end_src
+
+This will create a folder ~mutator~ with the ~mutants~ executable and all the dependencies bundled.
